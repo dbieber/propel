@@ -16,7 +16,7 @@
 // This module allows Propel to read PNG and JPG images.
 
 import { concat, fill, Tensor, tensor } from "./api";
-import { fetchArrayBuffer, fetchBuffer } from "./fetch";
+import { fetchArrayBuffer } from "./fetch";
 import { convert } from "./tensor";
 import { Mode } from "./types";
 import { createResolvable, IS_NODE, nodeRequire } from "./util";
@@ -120,7 +120,7 @@ const imageSignatures: Array<[number[], string]> = [
   [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], "image/png"]
 ];
 
-function readMIME(data: Buffer): string {
+function readMIME(data: Uint8Array): string {
   // find matched MIME type
   for (let i = 0; i < imageSignatures.length; ++i) {
     const [sig, type] = imageSignatures[i];
@@ -138,7 +138,7 @@ function readMIME(data: Buffer): string {
   return null;
 }
 
-async function pngReadHandler(data: Buffer, mode: Mode): Promise<Tensor> {
+async function pngReadHandler(data: ArrayBuffer, mode: Mode): Promise<Tensor> {
   const PNG = nodeRequire("pngjs").PNG;
   const promise = createResolvable<Tensor>();
   new PNG().parse(data).on("parsed", function(this: any) {
@@ -163,7 +163,7 @@ function pngSaveHandler(filename: string, image): Promise<void> {
   });
 }
 
-function jpegReadHandler(data: Buffer, mode: Mode): Tensor {
+function jpegReadHandler(data: ArrayBuffer, mode: Mode): Tensor {
   const JPEG = require("jpeg-js");
   const img = JPEG.decode(data, true);
   return toTensor(img.data, img.height, img.width, mode);
@@ -179,13 +179,14 @@ function jpegSaveHandler(filename: string, image): void {
 
 async function nodeImageDecoder(filename: string, mode: Mode)
     : Promise<Tensor> {
-  const data = await fetchBuffer(filename);
-  const MIME = readMIME(data);
-  switch (MIME){
+  const ab = await fetchArrayBuffer(filename);
+  const ui8 = new Uint8Array(ab);
+  const MIME = readMIME(ui8);
+  switch (MIME) {
     case "image/png":
-      return await pngReadHandler(data, mode);
+      return await pngReadHandler(ab, mode);
     case "image/jpeg":
-      return jpegReadHandler(data, mode);
+      return jpegReadHandler(ab, mode);
     default:
       throw new Error("This file is not a valid PNG/JPEG image.");
   }
